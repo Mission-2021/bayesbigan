@@ -289,6 +289,7 @@ def gen_output_to_enc_input(gX):
 if args.final_lr_mult is None:
     args.final_lr_mult = 0 if args.linear_decay else 0.01
 
+args.exp_dir = os.path.join(args.exp_dir, "bigan_%s_%d" % (args.dataset, int(time())))
 model_dir = '%s/models'%(args.exp_dir,)
 samples_dir = '%s/samples'%(args.exp_dir,)
 for d in [model_dir, samples_dir]:
@@ -408,6 +409,9 @@ if args.encode:
         z_sample = dist.logits_to_sample(z_preds)
         is_input = dist.dist_sized_slices(args.noise_input_joint_discrim)
         return [z for z, i in zip(z_sample, is_input) if i]
+
+import IPython
+IPython.embed()
 
 def disp(x):
     if isinstance(x, (int, float)):
