@@ -186,8 +186,8 @@ class Featurizer(LearningModule):
                 self.net.add_loss(loss, name=loss_name)
                 self.net.add_agg_loss_term(loss_name, weight=w, name=key)
 
-        h_y = [('real', h_real, 1, weight * len(h_gens))]
-        h_y += [('gen%d' % gi, h_g, 0, weight) for gi, h_g in enumerate(h_gens)]
+        h_y = [('real', h_real, 1, weight * len(h_gens) / 2)]
+        h_y += [('gen%d' % gi, h_g, 0, weight / 2) for gi, h_g in enumerate(h_gens)]
 
         add_discrim_cost(h_y)
         h_y_not = ((n, h, 1 - y, w) for n, h, y, w in h_y)

@@ -727,13 +727,6 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
     nnd_sizes = [100, 10, 1]
     nndVaXImages = flat(transform(vaXImages))
     
-    for gi, _gen in enumerate(gens):
-        gX = flat(batch_map(_gen, eval_gen_inputs, wraparound=True))
-        for subsample in nnd_sizes:
-            size = ng // subsample
-            gXsubset = gX[:size]
-            suffix = '' if (subsample == 1) else '/%d' % subsample
-            outs['NND_g%d_' % gi + suffix] = nnd_score(gXsubset, nndVaXImages, **kwargs)
     labels = vaY, trY
     images = vaXImages, trXImages
     big_images = vaXBigImages, trXBigImages
@@ -751,36 +744,42 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
         if f_discrim is not None:
             f = _get_feats(_discrim_feats, images[0])
             outs['CLS_d'] = accuracy(_discrim_preds, f, vaY)
-    if args.encode:
-        def image_recon_error(enc_inputs, gi, recon_sized_inputs=None):
-            def l2err(a, b, axis):
-                return ((a - b) ** 2).sum(axis=axis) ** 0.5
-            def _f_error(enc_inputs, recon_sized_inputs):
-                gen_input = _enc_recon(enc_inputs)
-                if isinstance(recon_sized_inputs, list):
-                    recon_sized_inputs = recon_sized_inputs[0]
-                inputs = transform(recon_sized_inputs, crop=args.crop_resize)
-                axis = tuple(range(1, inputs.ndim))
-                recon = _gens[gi](*gen_input)
+    for gi, _gen in enumerate(_gens):
+        gX = flat(batch_map(_gen, eval_gen_inputs, wraparound=True))
+        for subsample in nnd_sizes:
+            size = ng // subsample
+            gXsubset = gX[:size]
+            suffix = '' if (subsample == 1) else '/%d' % subsample
+            outs['NND_g%d_' % gi + suffix] = nnd_score(gXsubset, nndVaXImages, **kwargs)
+        if args.encode:
+            def image_recon_error(enc_inputs, gi, recon_sized_inputs=None):
+                def l2err(a, b, axis):
+                    return ((a - b) ** 2).sum(axis=axis) ** 0.5
+                def _f_error(enc_inputs, recon_sized_inputs):
+                    gen_input = _enc_recon(enc_inputs)
+                    if isinstance(recon_sized_inputs, list):
+                        recon_sized_inputs = recon_sized_inputs[0]
+                    inputs = transform(recon_sized_inputs, crop=args.crop_resize)
+                    axis = tuple(range(1, inputs.ndim))
+                    recon = _gens[gi](*gen_input)
                 
-                error = l2err(inputs, recon, axis=axis).reshape(-1, 1)
-                assert len(inputs) > 1
-                shifted_inputs = np.concatenate([inputs[1:], inputs[:1]], axis=0)
-                base_error = l2err(shifted_inputs, recon, axis=axis).reshape(-1, 1)
-                return np.concatenate([error, base_error], axis=1)
-            if recon_sized_inputs is None:
-                recon_sized_inputs = enc_inputs
-            errors = batch_map(_f_error, [enc_inputs, recon_sized_inputs],
-                               wraparound=True)
-            return errors.mean(axis=0)
+                    error = l2err(inputs, recon, axis=axis).reshape(-1, 1)
+                    assert len(inputs) > 1
+                    shifted_inputs = np.concatenate([inputs[1:], inputs[:1]], axis=0)
+                    base_error = l2err(shifted_inputs, recon, axis=axis).reshape(-1, 1)
+                    return np.concatenate([error, base_error], axis=1)
+                if recon_sized_inputs is None:
+                    recon_sized_inputs = enc_inputs
+                errors = batch_map(_f_error, [enc_inputs, recon_sized_inputs],
+                                   wraparound=True)
+                return errors.mean(axis=0)
        
-        if args.crop_size == args.crop_resize:
-            for gi in len(gX):
+            if args.crop_size == args.crop_resize:
                 outs['EGg%d' % gi], outs['EGg%d_b' % gi] = image_recon_error(
-                    gen_output_to_enc_input(gXs[gi]), gi)
-        else: 
-            # TO FIX
-            outs['EGr'], outs['EGr_b'] = image_recon_error(big_images[0], images[0])
+                    gen_output_to_enc_input(gX), gi)
+            else: 
+                # TO FIX
+                outs['EGr'], outs['EGr_b'] = image_recon_error(big_images[0], images[0])
     def format_str(key):
         def is_prop(key, prop_metrics=['NNC', 'CLS']):
             return any(key.startswith(m) for m in prop_metrics)
@@ -794,7 +793,7 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
         def imname(tag=None):
             tag = '' if (tag is None) else (tag + '.')
             tag += "g%d" % gi
-            return '%s/%d.%spng' % (samples_dir, epoch, tag)
+            return '%s/%d%s.png' % (samples_dir, epoch, tag)
         dataset.grid_vis(inverse_transform(samples), sample_shape, imname())
         if args.encode:
             # if args.crop_size == args.crop_resize:
@@ -919,6 +918,7 @@ def train():
     if args.disp_interval is None:
         args.disp_interval = total_niter + 1
     print("Starting training")
+    
     for epoch in range(start_epoch, total_niter + 1):
         do_eval = (epoch % args.disp_interval == 0) or (epoch in disp_epochs)
         do_save = (epoch in save_epochs) or (
@@ -947,6 +947,8 @@ def train():
 if __name__ == '__main__':
     if (args.weights is not None) or (args.resume is not None):
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
-#    import IPython
- #   IPython.embed()
+    print("TRAINING WITH MCMC SAMPLES@~!~!~!~!!!!!!")
+    print("%d samples!!!!" % args.num_generator)
+    #import IPython
+    #IPython.embed()
     train()
