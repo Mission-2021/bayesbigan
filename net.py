@@ -177,6 +177,7 @@ class Layer(object):
             w = reparameterized_weights(w, g, exp=exp_reparam,
                                         nin_axis=nin_axis)
         return w
+        return w, stddev
     def biases(self, dim):
         return self.add_param(np.zeros(dim), prefix='b')
     def gains(self, dim, init_value=1):
@@ -666,11 +667,20 @@ class Net(object):
             try:
                 loss_value = self.get_loss(loss).mean()
                 params = self.learnables() + extra_params
+                loss_value += self._prior_loss(params)
                 updates += updater(params, loss_value)
             except KeyError:
                 # didn't have a loss, check that we also had no learnables
                 assert not self.learnables(), 'had no loss but some learnables'
         return updates
+    def _prior_loss(self, params, stddev=0.02):
+        print("adding prior loss")
+        prior_loss = 0.0
+        for var in params:
+            nn = var / stddev
+            p = nn * nn
+            prior_loss += p.mean()
+        return prior_loss
 
     def get_deploy_updates(self):
         return self.deploy_updates.items()

@@ -289,6 +289,7 @@ def gen_output_to_enc_input(gX):
 if args.final_lr_mult is None:
     args.final_lr_mult = 0 if args.linear_decay else 0.01
 
+args.exp_dir = os.path.join(args.exp_dir, "bigan_%s_%d" % (args.dataset, int(time())))
 model_dir = '%s/models'%(args.exp_dir,)
 samples_dir = '%s/samples'%(args.exp_dir,)
 for d in [model_dir, samples_dir]:
@@ -689,6 +690,7 @@ def eval_costs(epoch, costs):
 
 def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
     start_time = time()
+    eval_costs(epoch, costs)
     kwargs = dict(metric='euclidean')
     outs = OrderedDict()
     _feats = {}
@@ -904,9 +906,11 @@ def train():
         epoch_time = time() - start_time
         print('Epoch %d: %f seconds (LR = %g)' \
               % (epoch, epoch_time, lrt.get_value()))
-        eval_costs(epoch, costs)
+        #eval_costs(epoch, costs)
 
 if __name__ == '__main__':
     if (args.weights is not None) or (args.resume is not None):
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
+    import IPython
+    IPython.embed()
     train()
