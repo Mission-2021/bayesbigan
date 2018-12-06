@@ -16,8 +16,8 @@ class LearningModule(object):
 
 class Generator(LearningModule):
     def __init__(self, args, dist, nc, z=None, source=None, mode='train',
-                 bnkwargs={}, gen_transform=None):
-        N = self.net = Net(source=source, name='Generator')
+                 bnkwargs={}, gen_transform=None, name="Generator"):
+        N = self.net = Net(source=source, name=name)
         self.set_mode(mode)
         h_and_weights = dist.embed_data()
         bn_use_ave = (mode == 'test')
@@ -31,7 +31,7 @@ class Generator(LearningModule):
                                shape=self.data.shape)
 
 class Featurizer(LearningModule):
-    def __init__(self, args, dist, X, gX, Y,
+    def __init__(self, args, dist, X, gXs, Y,
                  nc=3, ny=None, mode='train', bnkwargs={},
                  discrim_weight=0, encode_weight=0,
                  joint_discrim_weight=0, updater=None,
@@ -39,7 +39,7 @@ class Featurizer(LearningModule):
                  extra_cond_real=None, extra_cond_gen=None,
                  is_discrim=False, name='Featurizer'):
         self.X = X
-        self.gX = gX
+        self.gXs = gXs
         self.Y = Y
         self.name = name
         self.args = args
@@ -59,6 +59,7 @@ class Featurizer(LearningModule):
                len(self.cond_real) == len(self.cond_gen)
         self.do_encode = bool(encode_weight or joint_discrim_weight)
         self.is_discrim = is_discrim
+        # cat inputs is false in train_mnist.sh
         if args.cat_inputs and not any(a is None for a in (self.X, self.gX)):
             data_cat = L.Concat(self.X, self.gX, axis=0)
             if self.cond:
@@ -72,10 +73,12 @@ class Featurizer(LearningModule):
             h_real, h_gen = L.Slice(h_cat, slice_point=[self.X.value.shape[0]],
                                     axis=0)
         else:
-            h_real, h_gen = (None if (x is None) else self.feats(x, cond=c)
-                for x, c in [(self.X, self.cond_real), (self.gX, self.cond_gen)])
+            h_real = None if self.X is None else self.feats(self.X, cond=self.cond_real)
+            h_gens = [None if x is None else self.feats(x, cond=self.cond_gen) for x in self.gXs]
+            # h_real, h_gen = (None if (x is None) else self.feats(x, cond=c)
+            #     for x, c in [(self.X, self.cond_real), (self.gX, self.cond_gen)])
         assert self.net is not None
-        self.h_real, self.h_gen = h_real, h_gen
+        self.h_real, self.h_gens = h_real, h_gens
         if args.classifier and h_real is not None:
             self.labeler = labeler = MultilabelClassifier(self.net, ny)
             loss = labeler.loss(h_real, Y)
@@ -89,18 +92,20 @@ class Featurizer(LearningModule):
                 add_updates = self.net.add_updates
             add_updates(*updater(labeler.W, loss.mean()))
         if discrim_weight:
-            self.add_discrim_loss(h_real, h_gen, weight=discrim_weight)
+            self.add_discrim_loss(h_real, h_gens, weight=discrim_weight)
         if self.do_encode:
             self.encoder = encoder = Encoder(self.net, args, dist, self.Y,
                 X=self.X, updater=updater,
                 featurizer=self, bias=args.encode_out_bias)
+
             encoder.gen_cost = g = encoder.real_loss(self.h_real)
-            encoder.real_cost = r = encoder.gen_loss(self.h_gen)
-            cost_terms = [x.mean() for x in [g, r] if x is not None]
+            encoder.real_costs = rs = [encoder.gen_loss(h_gen) for h_gen in self.h_gens]
+            cost_terms = [x.mean() for x in [g] + [rs] if x is not None] 
+            # all of them are none in train_mnist.sh setting
             if cost_terms:
                 encoder.cost = sum(cost_terms)
-                if encoder.real_cost is not None:
-                    self.net.add_loss(encoder.real_cost,
+                if encoder.real_cost_mean is not None:
+                    self.net.add_loss(encoder.real_cost_mean,
                         weight=1, name='loss_real')
                 if encoder.gen_cost is not None:
                     self.net.add_loss(encoder.gen_cost,
@@ -166,7 +171,7 @@ class Featurizer(LearningModule):
         self._feats[key] = f
         return f
 
-    def add_discrim_loss(self, h_real, h_gen, weight=1, name='discrim'):
+    def add_discrim_loss(self, h_real, h_gens, weight=1, name='discrim'):
         discrim = {}
         assert not hasattr(self, name)
         setattr(self, name, discrim)
@@ -174,17 +179,22 @@ class Featurizer(LearningModule):
         def add_discrim_cost(h_y, prefix=''):
             key = '%sloss' % prefix
             cost = {}
-            for name, h, y in h_y:
+            for name, h, y, w in h_y:
                 if h is None: continue
                 loss = d.loss(h, y)
                 loss_name = '%s_%s' % (key, name)
                 self.net.add_loss(loss, name=loss_name)
-                self.net.add_agg_loss_term(loss_name, weight=weight/2, name=key)
-        h_y = ('real', h_real, 1), ('gen', h_gen, 0)
+                self.net.add_agg_loss_term(loss_name, weight=w, name=key)
+
+        h_y = [('real', h_real, 1, weight * len(h_gens))]
+        h_y += [('gen%d' % gi, h_g, 0, weight) for gi, h_g in enumerate(h_gens)]
+
         add_discrim_cost(h_y)
-        h_y_not = ((n, h, 1 - y) for n, h, y in h_y)
+        h_y_nots = ((n, h, 1 - y) for n, h, y in h_y)
         add_discrim_cost(h_y_not, prefix='opp_')
         return discrim
+
+
 
 class LinearPredictor(LearningModule):
     def __init__(self, N, nout, stddev=0, bias=False):

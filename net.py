@@ -674,12 +674,13 @@ class Net(object):
                 assert not self.learnables(), 'had no loss but some learnables'
         return updates
     def _prior_loss(self, params, stddev=0.02):
+        return 0. 
         prior_loss = 0.0
-        for p in params:
-            nn = var / stddev
-            p = nn * nn
-            prior_loss += p.mean()
-        return prior_loss
+        # for p in params:
+        #     nn = var / stddev
+        #     p = nn * nn
+        #     prior_loss += p.mean()
+        # return prior_loss
 
     def get_deploy_updates(self):
         return self.deploy_updates.items()
@@ -730,7 +731,7 @@ class Net(object):
     def _add_layer(self, layer_constructor, *args, **kwargs):
         type_name = layer_constructor.__name__
         self.layer_count[type_name] += 1
-        name = '%s%s%d' % (self.name_prefix, type_name,
+         name = '%s%s%d' % (self.name_prefix, type_name,
                            self.layer_count[type_name])
         checked_update(kwargs, net=self, name=name)
         layer = layer_constructor(*args, **kwargs)
