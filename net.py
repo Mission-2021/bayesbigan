@@ -612,7 +612,8 @@ class Net(object):
         self.name = name
         self.name_prefix = '' if (name is None) else ('%s/' % name)
         if source is not None:
-            assert name == source.name
+            assert name == source.name, \
+                   "name %s source.name %s" % (name, source.name)
 
         """self.loss: maps strings to losses (scalar tensor values)"""
         self.loss = OrderedDict()

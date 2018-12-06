@@ -79,6 +79,7 @@ parser.add_argument('--no_decay_bias', action='store_true',
     help="Don't apply weight decay to the bias(es), if any")
 parser.add_argument('--no_decay_gain', action='store_true',
     help="Don't apply weight decay to the gain(s), if any")
+parser.add_argument('--num_generator', type=int, default=1)
 
 # Deconvolutional / Generator
 parser.add_argument('--gen_net',
@@ -335,9 +336,16 @@ nets = []
 # generation
 gen_kwargs = dict(args=args, dist=dist, nc=nc, bnkwargs=bnkwargs,
                   gen_transform=gen_transform)
-train_gen = gan.Generator(**gen_kwargs)
-gX = train_gen.data
-gXtest = gan.Generator(source=train_gen.net, mode='test', **gen_kwargs).data
+train_gens = []
+gXs = []
+gXtests = []
+for ng in range(args.num_generator):
+    tg = gan.Generator(**gen_kwargs, name="Generator%d" % ng)
+    gXs.append(tg.data)
+    train_gens.append(tg)
+    testg = gan.Generator(source=tg.net, name="Generator%d" % ng,
+                          mode='test', **gen_kwargs).data
+    gXtests.append(testg)
 
 lrt = sharedX(args.learning_rate)
 
@@ -368,14 +376,14 @@ if args.discrim_optimizer is None:
 discrim_updater = get_updater(args.discrim_optimizer,
     lr=lrt, regularizer=discrim_reg)
 
-def featurizer(x=None, gx=None, args=args, **kwargs):
-    return gan.Featurizer(args, dist, x, gx, y, nc=nc, ny=ny,
+def featurizer(x=None, gxs=None, args=args, **kwargs):
+    return gan.Featurizer(args, dist, x, gxs, y, nc=nc, ny=ny,
         bnkwargs=bnkwargs, updater=updater, **kwargs)
-def discrim_featurizer(x=Xs, gx=gX, *a, **k):
-    return featurizer(x=x, gx=gx, *a, **k)
-gx_enc = gX if args.crop_size == args.crop_resize else None
-def encode_featurizer(x=X, gx=gx_enc, *a, **k):
-    return featurizer(x=x, gx=gx, *a, **k)
+def discrim_featurizer(x=Xs, gxs=gXs, *a, **k):
+    return featurizer(x=x, gxs=gxs, *a, **k)
+gx_encs = gXs if args.crop_size == args.crop_resize else None
+def encode_featurizer(x=X, gxs=gx_encs, *a, **k):
+    return featurizer(x=x, gxs=gxs, *a, **k)
 
 if args.discrim_weight:
     f_discrim = discrim_featurizer(
@@ -418,8 +426,8 @@ def disp(x):
 
 disp_costs = OrderedDict(D=disp(d_cost))  # name -> cost mapping
 
-gen_params = train_gen.net.params()
-nets.append(train_gen.net)
+gen_params = [tg.net.params() for tg in train_gens]
+nets.extend([tg.net for tg in train_gens])
 
 if args.joint_discrim_weight:
     assert args.encode
@@ -427,10 +435,10 @@ if args.joint_discrim_weight:
         joint_discrim_args = copy.deepcopy(args)
         joint_discrim_args.classifier = 0
         eZ = sample_z_from_x(X, net=f_encoder.net)
-        gX = train_gen.data
+        # gX = train_gen.data
         _, weights = gen_cond_and_weights = Z_dist.embed_data()
         real_cond_and_weights = eZ, weights
-        discrim = discrim_featurizer(x=Xs, gx=gX, args=joint_discrim_args,
+        discrim = discrim_featurizer(x=Xs, gxs=gXs, args=joint_discrim_args,
             extra_cond_gen=gen_cond_and_weights,
             extra_cond_real=real_cond_and_weights,
             discrim_weight=1,
@@ -440,9 +448,12 @@ if args.joint_discrim_weight:
     f_joint_discrim = joint_discrim(X, Xs, Y, dist)
     weight = args.joint_discrim_weight
     f_encoder.net.add_loss(f_joint_discrim.net.get_loss('opp_loss_real'),
-                           weight=weight, name='loss_real')
-    f_encoder.net.add_loss(f_joint_discrim.net.get_loss('opp_loss_gen'),
-                           weight=weight, name='loss_gen')
+                           weight=weight * len(train_gens), name='loss_real')
+    f_encoder.net.add_agg_loss_term("loss_real")
+    # for gi in range(len(train_gens)):
+    #     f_encoder.net.add_loss(
+    #         f_joint_discrim.net.get_loss('opp_loss_gen%d' % gi),
+    #         weight=weight, name='loss_gen%d' % gi)
     modules.append(f_joint_discrim)
     nets.append(f_joint_discrim.net)
     d_updates += f_joint_discrim.net.get_updates(updater=discrim_updater)
@@ -453,26 +464,32 @@ else:
 
 if args.encode:
     net = f_encoder.net
+    nets.append(net)
+    if args.encode_gen_weight:
+        for gi, train_g in enumerate(train_gens):
+                train_g.net.add_loss(f_joint_discrim.net.get_loss('opp_loss_gen%d' % gi),
+                                    name="loss_gen%d" % gi, weight=1)
+    """
     num_loss_terms = sum(l in net.loss for l in ['loss', 'loss_real', 'loss_gen'])
     weight = 1.0 / num_loss_terms
     if 'loss_real' in net.loss:
         net.add_agg_loss_term('loss_real', weight=weight)
     if 'loss_gen' in net.loss:
         net.add_agg_loss_term('loss_gen', weight=weight)
-    nets.append(net)
+    
     if args.encode_gen_weight:
         try:
-            train_gen.net.add_loss(net.get_loss(),
-                                   weight=args.encode_gen_weight)
         except KeyError:
             print('Warning: encoder had no separate loss to contribute to gen')
         encode_gen_params = net.learnables()
         for k in net.learnable_keys():
-            # mark all params unlearnable -- will be learned by gen
+            mark all params unlearnable -- will be learned by gen
             net._params[k] = net._params[k][0], False
         assert not net.learnables()
+
     else:
         encode_gen_params = []
+    """
     encode_params = net.params()
     e_updates = net.get_updates(updater=updater)
     encoder_loss = f_encoder.net.get_loss()
@@ -483,9 +500,10 @@ if args.encode:
 else:
     encode_params, encode_gen_params, e_updates = [], [], []
 
-g_updates = train_gen.net.get_updates(updater=updater,
-                                      extra_params=encode_gen_params)
-disp_costs.update(G=disp(train_gen.net.get_loss()))
+g_updates = []
+for gi, tg in enumerate(train_gens):
+    g_updates.extend(tg.net.get_updates(updater=updater, loss="loss_gen%d" % gi))
+    disp_costs["G%d" % gi] = disp(tg.net.get_loss(name="loss_gen%d" % gi))
 
 def set_mode(mode):
     for m in modules:
@@ -546,9 +564,9 @@ else:
     _train_g = lazy_function(inputs, [], updates=train_g_updates,
                              on_unused_input='ignore')
     _train_d = lazy_function(inputs, [], updates=train_d_updates)
-_gen_train = lazy_function(Z, gX.value)
+#_gen_trains = [lazy_function(Z, gX.value) for gX in gXs]
 set_mode('test')
-_gen = lazy_function(Z, gXtest.value)
+_gens = [lazy_function(Z, gXtest.value) for gXtest in gXtests]
 _cost = lazy_function(inputs, disp_costs.values(),
                       on_unused_input='ignore')
 if args.encode:
@@ -705,14 +723,17 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
             inputs = (_get_feats(f, x) for x in inputs)
         (vaX, trX), (vaY, trY) = inputs, labels
         return nnc_score(flat(trX), trY, flat(vaX), vaY, **kwargs)
-    gX = flat(batch_map(_gen, eval_gen_inputs, wraparound=True))
+    # gXs = [flat(batch_map(_gen, eval_gen_inputs, wraparound=True)) for _gen in _gens]
     nnd_sizes = [100, 10, 1]
     nndVaXImages = flat(transform(vaXImages))
-    for subsample in nnd_sizes:
-        size = ng // subsample
-        gXsubset = gX[:size]
-        suffix = '' if (subsample == 1) else '/%d' % subsample
-        outs['NND' + suffix] = nnd_score(gXsubset, nndVaXImages, **kwargs)
+    
+    for gi, _gen in enumerate(gens):
+        gX = flat(batch_map(_gen, eval_gen_inputs, wraparound=True))
+        for subsample in nnd_sizes:
+            size = ng // subsample
+            gXsubset = gX[:size]
+            suffix = '' if (subsample == 1) else '/%d' % subsample
+            outs['NND_g%d_' % gi + suffix] = nnd_score(gXsubset, nndVaXImages, **kwargs)
     labels = vaY, trY
     images = vaXImages, trXImages
     big_images = vaXBigImages, trXBigImages
@@ -731,16 +752,17 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
             f = _get_feats(_discrim_feats, images[0])
             outs['CLS_d'] = accuracy(_discrim_preds, f, vaY)
     if args.encode:
-        def image_recon_error(enc_inputs, recon_sized_inputs=None):
+        def image_recon_error(enc_inputs, gi, recon_sized_inputs=None):
             def l2err(a, b, axis):
                 return ((a - b) ** 2).sum(axis=axis) ** 0.5
             def _f_error(enc_inputs, recon_sized_inputs):
                 gen_input = _enc_recon(enc_inputs)
-                recon = _gen(*gen_input)
                 if isinstance(recon_sized_inputs, list):
                     recon_sized_inputs = recon_sized_inputs[0]
                 inputs = transform(recon_sized_inputs, crop=args.crop_resize)
                 axis = tuple(range(1, inputs.ndim))
+                recon = _gens[gi](*gen_input)
+                
                 error = l2err(inputs, recon, axis=axis).reshape(-1, 1)
                 assert len(inputs) > 1
                 shifted_inputs = np.concatenate([inputs[1:], inputs[:1]], axis=0)
@@ -751,44 +773,59 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
             errors = batch_map(_f_error, [enc_inputs, recon_sized_inputs],
                                wraparound=True)
             return errors.mean(axis=0)
-        outs['EGr'], outs['EGr_b'] = image_recon_error(big_images[0], images[0])
+       
         if args.crop_size == args.crop_resize:
-            outs['EGg'], outs['EGg_b'] = image_recon_error(gen_output_to_enc_input(gX))
+            for gi in len(gX):
+                outs['EGg%d' % gi], outs['EGg%d_b' % gi] = image_recon_error(
+                    gen_output_to_enc_input(gXs[gi]), gi)
+        else: 
+            # TO FIX
+            outs['EGr'], outs['EGr_b'] = image_recon_error(big_images[0], images[0])
     def format_str(key):
         def is_prop(key, prop_metrics=['NNC', 'CLS']):
             return any(key.startswith(m) for m in prop_metrics)
         return '%s: %.2f' + ('%%' if is_prop(key) else '')
     print('  '.join(format_str(k) % (k, v)
                     for k, v in outs.items()))
-    samples = batch_map(_gen, sample_inputs, wraparound=True)
-    sample_shape = num_sample_rows, num_sample_cols
-    def imname(tag=None):
-        tag = '' if (tag is None) else (tag + '.')
-        return '%s/%d.%spng' % (samples_dir, epoch, tag)
-    dataset.grid_vis(inverse_transform(samples), sample_shape, imname())
-    if args.encode:
-        if args.crop_size == args.crop_resize:
-            # pass the generator's samples back through encoder;
-            # then pass codes back through generator
-            enc_gen_inputs = gen_output_to_enc_input(samples)
-            samples_enc = batch_map(_enc_recon, enc_gen_inputs, wraparound=True)
-            samples_regen = batch_map(_gen, samples_enc, wraparound=True)
-            dataset.grid_vis(inverse_transform(samples_regen), sample_shape,
-                     imname('regen'))
-        assert trXVisRaw.dtype == np.uint8
-        for func, name in [(_enc_recon, 'real_regen'), (_enc_sample, 'real_regen_s')]:
-            real_enc = batch_map(func, trXBigVisRaw, wraparound=True)
+
+    for gi, _gen in enumerate(_gens):
+        samples = batch_map(_gen, sample_inputs, wraparound=True)
+        sample_shape = num_sample_rows, num_sample_cols
+        def imname(tag=None):
+            tag = '' if (tag is None) else (tag + '.')
+            tag += "g%d" % gi
+            return '%s/%d.%spng' % (samples_dir, epoch, tag)
+        dataset.grid_vis(inverse_transform(samples), sample_shape, imname())
+        if args.encode:
+            # if args.crop_size == args.crop_resize:
+                # pass the generator's samples back through encoder;
+                # then pass codes back through generator
+                # enc_gen_inputs = gen_output_to_enc_input(samples)
+                # samples_enc = batch_map(_enc_recon, enc_gen_inputs, wraparound=True)
+                # samples_regen = batch_map(_gen, samples_enc, wraparound=True)
+                # dataset.grid_vis(inverse_transform(samples_regen), sample_shape,
+                #          imname('regen'))
+            assert trXVisRaw.dtype == np.uint8
+            real_enc = batch_map(_enc_recon, trXBigVisRaw, wraparound=True)
             real_regen = batch_map(_gen, real_enc, wraparound=True)
-            dataset.grid_vis(inverse_transform(real_regen), grid_shape, imname(name))
+            dataset.grid_vis(inverse_transform(real_regen), grid_shape, imname("real_regen"))
+            
+            # for func, name in [(_enc_recon, 'real_regen'), (_enc_sample, 'real_regen_s')]:
+            #     real_enc = batch_map(func, trXBigVisRaw, wraparound=True)
+            #     real_regen = batch_map(_gen, real_enc, wraparound=True)
+            #     dataset.grid_vis(inverse_transform(real_regen), grid_shape, imname(name))
+
+
     eval_time = time() - start_time
     print('Eval done. (%f seconds)\n' % eval_time)
 
 param_groups = dict(
     discrim=discrim_params,
     joint_discrim=joint_discrim_params,
-    gen=gen_params,
     encode=encode_params,
 )
+for gi in range(len(gen_params)):
+    param_groups["gen%d" % gi] = gen_params[gi]
 
 def save_params(epoch, groups=param_groups):
     for key, param_list in groups.items():
@@ -890,7 +927,7 @@ def train():
             (epoch % args.save_interval == 0)
         )
         #if do_eval or do_save: 
-        costs = deploy()
+        #costs = deploy()
         if do_save: save_params(epoch)
         if do_eval: eval_and_disp(epoch, costs)
         if epoch == total_niter:
