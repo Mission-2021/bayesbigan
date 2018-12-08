@@ -177,6 +177,7 @@ class Layer(object):
             w = reparameterized_weights(w, g, exp=exp_reparam,
                                         nin_axis=nin_axis)
         return w
+        return w, stddev
     def biases(self, dim):
         return self.add_param(np.zeros(dim), prefix='b')
     def gains(self, dim, init_value=1):
@@ -611,7 +612,8 @@ class Net(object):
         self.name = name
         self.name_prefix = '' if (name is None) else ('%s/' % name)
         if source is not None:
-            assert name == source.name
+            assert name == source.name, \
+                   "name %s source.name %s" % (name, source.name)
 
         """self.loss: maps strings to losses (scalar tensor values)"""
         self.loss = OrderedDict()
@@ -660,17 +662,36 @@ class Net(object):
         for k in (dict(args), kwargs):
             checked_update(self.updates, k)
 
-    def get_updates(self, updater=None, loss='loss', extra_params=[]):
+    def get_updates(self, updater=None, dataset_size=None, loss='loss', extra_params=[]):
         updates = list(self.updates.items())
         if updater is not None:
             try:
                 loss_value = self.get_loss(loss).mean()
                 params = self.learnables() + extra_params
+                loss_value += self._prior_loss(params, dataset_size)
+                loss_value += self._noise(params, dataset_size)
                 updates += updater(params, loss_value)
             except KeyError:
                 # didn't have a loss, check that we also had no learnables
                 assert not self.learnables(), 'had no loss but some learnables'
+        print("no updater, returning updates directly")
         return updates
+    def _prior_loss(self, params, dataset_size, stddev=0.02):
+        print("adding prior loss for", self.name)
+        prior_loss = 0.0
+        for var in params:
+            nn = var / stddev
+            p = nn * nn
+            prior_loss += p.mean()
+        prior_loss /= dataset_size
+        return prior_loss
+   
+    def _noise(self, params, dataset_size, scale=0.02):
+        noise_loss = 0.0
+        for var in params:
+            noise_loss += inits.Normal(loc=0., scale=scale)(shape=var.shape.eval()).mean() 
+        noise_loss /= dataset_size
+        return noise_loss
 
     def get_deploy_updates(self):
         return self.deploy_updates.items()

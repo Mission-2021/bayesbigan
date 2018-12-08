@@ -289,8 +289,9 @@ def gen_output_to_enc_input(gX):
 if args.final_lr_mult is None:
     args.final_lr_mult = 0 if args.linear_decay else 0.01
 
-model_dir = '%s/models'%(args.exp_dir,)
-samples_dir = '%s/samples'%(args.exp_dir,)
+args.exp_dir = os.path.join(args.exp_dir, "bigan_%s_%d" % (args.dataset, int(time())))
+model_dir = args.exp_dir
+samples_dir = args.exp_dir
 for d in [model_dir, samples_dir]:
     if not os.path.exists(d):
         os.makedirs(d)
@@ -384,7 +385,7 @@ if args.discrim_weight:
         name='Discriminator')
     d_cost = f_discrim.net.get_loss().mean()
     discrim_params = f_discrim.net.params()
-    d_updates = f_discrim.net.get_updates(updater=discrim_updater)
+    d_updates = f_discrim.net.get_updates(updater=discrim_updater, dataset_size=dataset.ntrain)
     g_cost = f_discrim.net.get_loss('opp_loss_gen')
     train_gen.net.add_loss(g_cost)
     modules.append(f_discrim)
@@ -444,7 +445,7 @@ if args.joint_discrim_weight:
                            weight=weight, name='loss_gen')
     modules.append(f_joint_discrim)
     nets.append(f_joint_discrim.net)
-    d_updates += f_joint_discrim.net.get_updates(updater=discrim_updater)
+    d_updates += f_joint_discrim.net.get_updates(updater=discrim_updater, dataset_size=dataset.ntrain)
     joint_discrim_params = f_joint_discrim.net.params()
     disp_costs.update(JD=disp(f_joint_discrim.net.get_loss()))
 else:
@@ -473,7 +474,7 @@ if args.encode:
     else:
         encode_gen_params = []
     encode_params = net.params()
-    e_updates = net.get_updates(updater=updater)
+    e_updates = net.get_updates(updater=updater, dataset_size=dataset.ntrain)
     encoder_loss = f_encoder.net.get_loss()
     disp_costs.update(E=disp(encoder_loss))
     e_only_cost = f_encoder.encoder.cost
@@ -482,7 +483,7 @@ if args.encode:
 else:
     encode_params, encode_gen_params, e_updates = [], [], []
 
-g_updates = train_gen.net.get_updates(updater=updater,
+g_updates = train_gen.net.get_updates(updater=updater, dataset_size=dataset.ntrain,
                                       extra_params=encode_gen_params)
 disp_costs.update(G=disp(train_gen.net.get_loss()))
 
@@ -909,4 +910,6 @@ def train():
 if __name__ == '__main__':
     if (args.weights is not None) or (args.resume is not None):
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
+    import IPython
+    IPython.embed()
     train()
