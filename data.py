@@ -267,6 +267,20 @@ class MemoryDataProvider(DataProvider):
             images = images.reshape((-1, ) + self.image_shape)
         return [images], labels
 
+def cifar_data_providers(batch_size, crop_size=[]):
+    if isinstance(crop_size, int): crop_size = [crop_size]
+    
+    shape = 3, 32, 32
+    from load import cifar
+    trX, teX, trY, teY = cifar()
+    
+    return {
+        "train": MemoryDataProvider(trX, trY, batch_size, 
+                                    crop_size=crop_size, image_shape=shape),
+        "val"  : MemoryDataProvider(teX, teY, batch_size, 
+                                    crop_size=crop_size, image_shape=shape)
+    }
+
 def mnist_data_providers(batch_size, crop_size=[], use_test_set=False):
     if isinstance(crop_size, int): crop_size = [crop_size]
     from load import mnist_with_valid_set
@@ -353,6 +367,16 @@ class Dataset(object):
             self.grid_vis = grayscale_grid_vis
             providers = mnist_data_providers(args.batch_size, crop_size=crop_sizes,
                                              use_test_set=args.use_test_set)
+
+        elif args.dataset == "cifar":
+            self.nc, self.ny = 3, 10
+            providers = cifar_data_providers(args.batch_size, crop_size=crop_sizes)
+            def inverse_transform(X, crop=args.crop_resize):
+                return X.reshape(-1, self.nc, crop, crop).transpose(0, 2, 3, 1)
+            self.grid_vis = color_grid_vis
+            self.native_range = 0, 255
+            self.num_vis_samples = 20
+
         elif args.dataset in ('pong', 'spaceinv', 'seaquest',
                               'qbert', 'breakout', 'beamrider'):
             if args.dataset == 'pong':
@@ -376,7 +400,7 @@ class Dataset(object):
             self.num_vis_samples = 20
             self.native_range = 0, 1
             def inverse_transform(X, crop=args.crop_resize):
-                return X.reshape(-1, nc, crop, crop).transpose(0, 2, 3, 1)
+                return X.reshape(-1, self.nc, crop, crop).transpose(0, 2, 3, 1)
             self.grid_vis = rgba_grid_vis
             providers = f_data_providers(args.batch_size, crop_size=crop_sizes)
         else:

@@ -7,8 +7,6 @@ class LazyFunction(object):
         self.kwargs = kwargs
     def __call__(self, *args, **kwargs):
         if self.function is None:
-            #print("lazy function args", self.args)
-            #print("lazy function kwargs", self.kwargs)
             self.function = theano.function(*self.args, **self.kwargs)
             del self.args
             del self.kwargs

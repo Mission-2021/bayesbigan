@@ -362,19 +362,21 @@ class Deconv(Layer):
 
 class Pool(Layer):
     def get_output(self, h, ksize=1, stride=1, pad='SAME', mode='max'):
-        from theano.sandbox.cuda.dnn import dnn_pool
+        #from theano.sandbox.cuda.dnn import dnn_pool
+        from theano.tensor.signal.pool import pool_2d as dnn_pool
         if mode == 'ave':
             mode = 'average_exc_pad'  # other choice is average_inc_pad
         h, h_shape = h.value, h.shape
         assert len(h_shape) == 4
         pad = get_pad(pad, ksize)
         out = dnn_pool(h, ws=(ksize, ksize), stride=(stride, stride),
-                       pad=(pad, pad))
+                       pad=(pad, pad), ignore_border=True)
         return Output(out)
 
 class SpatialUpsample(Layer):
     def get_output(self, h, factor=2, axis=[2, 3], use_gpu_upsample=True):
-        import theano.sandbox.cuda.dnn as dnn
+        #import theano.sandbox.cuda.dnn as dnn
+        import theano.gpuarray.dnn as dnn
         assert isinstance(factor, int)
         assert factor >= 1
         h, h_shape = h.value, h.shape
@@ -437,7 +439,7 @@ class FCMult(Layer):
     def get_output(self, h, W):
         h, h_shape, h_max = h.value, h.shape, h.index_max
         nin = np.prod(h_shape[1:], dtype=np.int) if (h_max is None) else h_max
-        assert nin == W.shape[0]
+        assert nin == W.shape[0], "nin is %d but W.shape[0] is %d" % (nin, W.shape[0])
         W = W.value
         if h_max is None:
             if h.ndim > 2:
@@ -662,26 +664,34 @@ class Net(object):
         for k in (dict(args), kwargs):
             checked_update(self.updates, k)
 
-    def get_updates(self, updater=None, loss='loss', extra_params=[]):
+    def get_updates(self, updater=None, dataset_size=None, loss='loss', extra_params=[]):
         updates = list(self.updates.items())
         if updater is not None:
             try:
                 loss_value = self.get_loss(loss).mean()
                 params = self.learnables() + extra_params
-                loss_value += self._prior_loss(params)
+                loss_value += self._prior_loss(params, dataset_size)
+                loss_value += self._noise(params, dataset_size)
                 updates += updater(params, loss_value)
             except KeyError:
                 # didn't have a loss, check that we also had no learnables
                 assert not self.learnables(), 'had no loss but some learnables'
         return updates
-    def _prior_loss(self, params, stddev=0.02):
-        print("adding prior loss")
+    def _prior_loss(self, params, dataset_size, stddev=0.02):
+        print("adding prior loss for", self.name)
         prior_loss = 0.0
         for var in params:
             nn = var / stddev
             p = nn * nn
-            prior_loss += p.mean()
+        prior_loss /= dataset_size
         return prior_loss
+   
+    def _noise(self, params, dataset_size, scale=0.02):
+        noise_loss = 0.0
+        for var in params:
+            noise_loss += inits.Normal(loc=0., scale=scale)(shape=var.shape.eval()).mean() 
+        noise_loss /= dataset_size
+        return noise_loss
 
     def get_deploy_updates(self):
         return self.deploy_updates.items()
@@ -915,13 +925,13 @@ def min_deconvnet_28(h, N=None, nout=3, size=None, bn_flat=True, nonlin='ReLU',
 if False:
     convnet_28 = min_convnet_28
     deconvnet_28 = min_deconvnet_28
+kwargs32 = kwargs28
 
-kwargs64 = dict(batch_norm=True, bias=True, gain=True)
-
-def deconvnet_64(h, N=None, nout=3, size=None, bn_flat=True,
-                 nonlin='ReLU', bnkwargs=kwargs64, num_fc=0, fc_dims=[],
+def deconvnet_32(h, N=None, nout=3, size=None, bn_flat=True,
+                 nonlin='ReLU', bnkwargs=kwargs32, num_fc=0, fc_dims=[],
                  bn_use_ave=False, num_refine=0, refine_ksize=5,
                  start_size=4, ksize=5, deconv_op='Deconv'):
+    print("deconvnet_32, size =", size)
     cond = h
     if N is None: N = Net()
     nonlin = getattr(N, nonlin)
@@ -936,6 +946,59 @@ def deconvnet_64(h, N=None, nout=3, size=None, bn_flat=True,
         return acts(deconv_op(h, ksize=ksize, **kwargs), ksize=ksize)
     # do FCs
     fc_dims = [size*16] * num_fc + fc_dims
+    print("fc_dims", fc_dims)
+    for index, dim in enumerate(fc_dims):
+        h = acts(multifc(N, h, nout=dim), do_cond=bool(index))
+    # do deconv from 4x4
+    ss = start_size
+    shape = size*8, ss, ss
+    if bn_flat:
+        # Batch normalize, then reshape to image.
+        # (Each individual pixel of reshaped image is treated as a separate
+        # channel in batch norm. This is what was done in the original code.)
+        h = acts(multifc(N, h, nout=np.prod(shape)), do_cond=bool(fc_dims))
+        # recompute channel_dim in case it was altered by acts
+        channel_dim = np.prod(h.shape[1:]) // np.prod(shape[1:])
+        assert channel_dim * np.prod(shape[1:]) == np.prod(h.shape[1:])
+        shape = (channel_dim, ) + shape[1:]
+        h = N.Reshape(h, shape=((-1, ) + shape))
+    else:
+        h = acts(multifc(N, h, nout=shape), do_cond=bool(fc_dims))
+    h = deconv_acts(h, nout=(size*4, ss*2, ss*2), stride=2)
+    h = deconv_acts(h, nout=(size*2, ss*4, ss*4), stride=2)
+    curnout = (nout if num_refine == 0 else size//2, ss*8, ss*8)
+    h = deconv_op(h, nout=curnout, ksize=ksize, stride=2)
+    for i in range(num_refine):
+        h = acts(h, ksize=k)
+        is_last = (i == num_refine - 1)
+        curnout = nout if is_last else (size//2)
+        h = N.Conv(h, nout=curnout, ksize=refine_ksize, stride=1)
+    h = N.Sigmoid(h) # generate images in [0, 1] range
+    return h, N
+
+kwargs64 = dict(batch_norm=True, bias=True, gain=True)
+
+
+def deconvnet_64(h, N=None, nout=3, size=None, bn_flat=True,
+                 nonlin='ReLU', bnkwargs=kwargs64, num_fc=0, fc_dims=[],
+                 bn_use_ave=False, num_refine=0, refine_ksize=5,
+                 start_size=4, ksize=5, deconv_op='Deconv'):
+    print("deconvnet_64, size =", size)
+    cond = h
+    if N is None: N = Net()
+    nonlin = getattr(N, nonlin)
+    if size is None: size = 128
+    def acts(h, ksize=1, do_cond=True):
+        if do_cond: h = apply_cond(N, h, cond=cond, ksize=ksize)
+        h = batch_norm(N, h, use_ave=bn_use_ave, **bnkwargs)
+        h = nonlin(h)
+        return h
+    deconv_op = getattr(N, deconv_op)
+    def deconv_acts(h, ksize=ksize, **kwargs):
+        return acts(deconv_op(h, ksize=ksize, **kwargs), ksize=ksize)
+    # do FCs
+    fc_dims = [size*16] * num_fc + fc_dims
+    print("fc_dims", fc_dims)
     for index, dim in enumerate(fc_dims):
         h = acts(multifc(N, h, nout=dim), do_cond=bool(index))
     # do deconv from 4x4
@@ -965,7 +1028,6 @@ def deconvnet_64(h, N=None, nout=3, size=None, bn_flat=True,
         h = N.Conv(h, nout=curnout, ksize=refine_ksize, stride=1)
     h = N.Sigmoid(h) # generate images in [0, 1] range
     return h, N
-
 def deconvnet_84(*args, **kwargs):
     if 'start_size' not in kwargs:
         kwargs.update(start_size=6)
@@ -1160,6 +1222,11 @@ def convnet(h, N=None, cond=None, arch=None, size=None, nonlin='LReLU',
         h = conv_acts(h, nout=size*1, ksize=8, stride=4, pad=0)
         h = conv_acts(h, nout=size*2, ksize=4, stride=2, pad=0)
         h = acts(N.FC(h, nout=size*16))
+    elif arch == 'convnet_32':
+        assert size is not None
+        h = nonlin(N.Conv(h, nout=size*1, ksize=5, stride=2))
+        h =     conv_acts(h, nout=size*2, ksize=5, stride=2)
+        h =     conv_acts(h, nout=size*4, ksize=5, stride=2)
     elif arch == 'convnet_64':
         if size is None: size = 128
         h = nonlin(N.Conv(h, nout=size*1, ksize=5, stride=2))

@@ -290,9 +290,11 @@ def gen_output_to_enc_input(gX):
 if args.final_lr_mult is None:
     args.final_lr_mult = 0 if args.linear_decay else 0.01
 
-args.exp_dir = os.path.join(args.exp_dir, "bigan_%s_%d" % (args.dataset, int(time())))
-model_dir = '%s/models'%(args.exp_dir,)
-samples_dir = '%s/samples'%(args.exp_dir,)
+args.exp_dir = os.path.join(
+    args.exp_dir, 
+    "bigan_%s_g%d_%d" % (args.dataset, args.num_generator, int(time())))
+model_dir = args.exp_dir
+samples_dir = args.exp_dir
 for d in [model_dir, samples_dir]:
     if not os.path.exists(d):
         os.makedirs(d)
@@ -393,7 +395,7 @@ if args.discrim_weight:
         name='Discriminator')
     d_cost = f_discrim.net.get_loss().mean()
     discrim_params = f_discrim.net.params()
-    d_updates = f_discrim.net.get_updates(updater=discrim_updater)
+    d_updates = f_discrim.net.get_updates(updater=discrim_updater, dataset_size=dataset.ntrain)
     g_cost = f_discrim.net.get_loss('opp_loss_gen')
     train_gen.net.add_loss(g_cost)
     modules.append(f_discrim)
@@ -456,7 +458,7 @@ if args.joint_discrim_weight:
     #         weight=weight, name='loss_gen%d' % gi)
     modules.append(f_joint_discrim)
     nets.append(f_joint_discrim.net)
-    d_updates += f_joint_discrim.net.get_updates(updater=discrim_updater)
+    d_updates += f_joint_discrim.net.get_updates(updater=discrim_updater, dataset_size=dataset.ntrain)
     joint_discrim_params = f_joint_discrim.net.params()
     disp_costs.update(JD=disp(f_joint_discrim.net.get_loss()))
 else:
@@ -491,7 +493,7 @@ if args.encode:
         encode_gen_params = []
     """
     encode_params = net.params()
-    e_updates = net.get_updates(updater=updater)
+    e_updates = net.get_updates(updater=updater, dataset_size=dataset.ntrain)
     encoder_loss = f_encoder.net.get_loss()
     disp_costs.update(E=disp(encoder_loss))
     e_only_cost = f_encoder.encoder.cost
@@ -502,7 +504,8 @@ else:
 
 g_updates = []
 for gi, tg in enumerate(train_gens):
-    g_updates.extend(tg.net.get_updates(updater=updater, loss="loss_gen%d" % gi))
+    g_updates.extend(tg.net.get_updates(
+        updater=updater, dataset_size=dataset.ntrain, loss="loss_gen%d" % gi))
     disp_costs["G%d" % gi] = disp(tg.net.get_loss(name="loss_gen%d" % gi))
 
 def set_mode(mode):
@@ -548,6 +551,7 @@ deploy_updates = []
 for n in nets: deploy_updates.extend(n.get_deploy_updates())
 _deploy_update = lazy_function(deploy_inputs, list(disp_costs.values()),
                                updates=deploy_updates)
+print("deploy updates", _deploy_update)
 update_both = (not args.no_update_both) and (args.k == 1)
 niter = args.epochs # # of iter at starting learning rate
 niter_decay = args.decay_epochs # # of iter to decay learning rate
@@ -901,8 +905,15 @@ def deploy():
         p.set_value(0 * p.get_value())
     start_time = time()
     print('Running %d deploy update iterations...' % args.deploy_iters)
-    costs = np.mean([_deploy_update(*get_batch(deploy=True))
-                     for _ in range(args.deploy_iters)], axis=0)
+    #costs = np.mean([_deploy_update(*get_batch(deploy=True))
+    #                 for _ in range(args.deploy_iters)], axis=0)
+    costs = []
+    for i in range(args.deploy_iters):
+        print("deploy iter %d" % i, end="\r")
+        costs.append(_deploy_update(*get_batch(deploy=True)))
+    print()
+    costs = np.mean(costs, axis=0)
+
     deploy_time = time() - start_time
     print('done. (%f seconds)\n' % deploy_time)
     return costs
@@ -920,7 +931,7 @@ def train():
     print("Starting training")
     
     for epoch in range(start_epoch, total_niter + 1):
-        do_eval = (epoch % args.disp_interval == 0) or (epoch in disp_epochs)
+        do_eval = (epoch != 0 and epoch % args.disp_interval == 0) or (epoch in disp_epochs)
         do_save = (epoch in save_epochs) or (
             (args.save_interval is not None) and
             (epoch > start_epoch) and

@@ -2,4 +2,4 @@
 *.pyo
 *.png
 exp/*
-
+check-gpu.py

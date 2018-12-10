@@ -12,7 +12,7 @@ from PIL import Image
 try:
     from tqdm import tqdm
 except ImportError:
-    print 'module tqdm not found; progress will not be displayed'
+    print('module tqdm not found; progress will not be displayed')
     def tqdm(gen, *a, **k): return gen
 
 def file_list(root, directory='.', recursive=False):
@@ -52,10 +52,10 @@ def resize_image(minor_size, in_root, out_root, path,
                 assert min(image.size) == minor_size
                 return
             except Exception as e:
-                print 'Got exception on existing image, removing:', out_full_path
-                print e.message
+                print('Got exception on existing image, removing:', out_full_path)
+                print(e.message)
                 if e.message == 'Decompressed Data Too Large':
-                    print 'Trying to save with PLT'
+                    print('Trying to save with PLT')
                     use_plt = True
                 os.remove(out_full_path)
         else:
@@ -64,7 +64,7 @@ def resize_image(minor_size, in_root, out_root, path,
     try:
         image = Image.open(full_path)
     except IOError:
-        print 'IOError on open:', full_path
+        print('IOError on open:', full_path)
         if strict:
             raise
         return
@@ -76,15 +76,15 @@ def resize_image(minor_size, in_root, out_root, path,
     try:
         image = image.resize(new_size, Image.ANTIALIAS)
     except IOError:
-        print 'IOError on resize:', full_path
+        print('IOError on resize:', full_path)
         if strict:
             raise
         return
     if is_png:
         image = image.convert('RGB')
     if verbose:
-        print 'Resized image (%s) from %s to %s; saving to file: %s' % \
-            (full_path, size, image.size, out_full_path)
+        print('Resized image (%s) from %s to %s; saving to file: %s' % \
+            (full_path, size, image.size, out_full_path))
     if use_plt:
         plt.imsave(out_full_path, np.array(image, dtype=np.uint8))
     else:
@@ -92,27 +92,26 @@ def resize_image(minor_size, in_root, out_root, path,
 
 class FakePool(object):
     def imap_unordered(self, function, iterable, chunksize=None):
-        return itertools.imap(function, iterable)
+        return list(map(function, iterable))
 
 def resize_directory(minor_size, in_root, out_root, pool=FakePool(),
                      verbose=False, **kwargs):
-    if verbose: print 'Finding files in input dir: ', in_root
+    if verbose: print('Finding files in input dir: ', in_root)
     files = file_list(in_root, recursive=args.recursive)
     if verbose:
-        print 'Done. Found %d files:' % len(files)
+        print('Done. Found %d files:' % len(files))
         k = 10
-        print '\n'.join('\t'+f for f in
-                        (files[:k] + (['...'] if len(files) > k else [])))
-        print 'Replicating subdir structure in output dir:', out_root
+        print('\n'.join('\t'+f for f in
+                        (files[:k] + (['...'] if len(files) > k else []))))
+        print('Replicating subdir structure in output dir:', out_root)
     makedirs(out_root, files)
-    if verbose: print 'Done.'
+    if verbose: print('Done.')
     resize = functools.partial(resize_image, minor_size,
                                in_root, out_root, **kwargs)
-    if verbose: print 'Resizing %d images.' % len(files)
+    if verbose: print('Resizing %d images.' % len(files))
     iterator = pool.imap_unordered(resize, files, chunksize=10)
     for _ in tqdm(iterator, total=len(files)): pass
-    if verbose: print 'Done.'
-
+    if verbose: print('Done.')
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(
@@ -152,7 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('output_directory',
         help='Directory to be filled with output images')
     args = parser.parse_args()
-    if not args.quiet: print 'Opening pool with %d workers' % args.jobs
+    if not args.quiet: print('Opening pool with %d workers' % args.jobs)
     if args.jobs == 0:
         pool = FakePool()
     elif args.jobs >= 1:
