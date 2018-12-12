@@ -1,6 +1,6 @@
 import sys
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import copy
 import itertools
 from matplotlib import pyplot as plt
@@ -502,9 +502,9 @@ if args.encode:
 else:
     encode_params, encode_gen_params, e_updates = [], [], []
 
-g_updates = []
+g_updates_list = []
 for gi, tg in enumerate(train_gens):
-    g_updates.extend(tg.net.get_updates(
+    g_updates_list.append(tg.net.get_updates(
         updater=updater, dataset_size=dataset.ntrain, loss="loss_gen%d" % gi))
     disp_costs["G%d" % gi] = disp(tg.net.get_loss(name="loss_gen%d" % gi))
 
@@ -556,9 +556,11 @@ update_both = (not args.no_update_both) and (args.k == 1)
 niter = args.epochs # # of iter at starting learning rate
 niter_decay = args.decay_epochs # # of iter to decay learning rate
 if update_both:
-    all_updates = g_updates + d_updates + e_updates
-    _train_gd = lazy_function(inputs, [], updates=all_updates,
-                              on_unused_input='ignore')
+    _train_gd_list = []
+    for g_updates in g_updates_list:
+        all_updates = g_updates + d_updates + e_updates
+        _train_gd_list.append(lazy_function(inputs, [], updates=all_updates,
+                              on_unused_input='ignore'))
 else:
     niter *= 2
     niter_decay *= 2
@@ -821,7 +823,7 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
 
     eval_time = time() - start_time
     print('Eval done. (%f seconds)\n' % eval_time)
-
+    return outs
 param_groups = dict(
     discrim=discrim_params,
     joint_discrim=joint_discrim_params,
@@ -889,9 +891,9 @@ def get_batch(deploy=False):
     return inputs
 
 invk = int(args.k ** (-1) + 0.5)
-def train_batch(inputs, n_updates):
+def train_batch(train_epoch, inputs, n_updates):
     if update_both:
-        _train_gd(*inputs)
+        _train_gd_list[train_epoch % args.num_generator](*inputs)
         return
     if ((args.k >= 1 and (n_updates % (args.k+1) == 0)) or
         (args.k < 1 and (n_updates % (invk+1) != 0))):
@@ -930,16 +932,28 @@ def train():
         args.disp_interval = total_niter + 1
     print("Starting training")
     
+   
+    performances = defaultdict(lambda: [])    
+
     for epoch in range(start_epoch, total_niter + 1):
-        do_eval = (epoch != 0 and epoch % args.disp_interval == 0) or (epoch in disp_epochs)
+        do_eval = (epoch % args.disp_interval == 0) or (epoch in disp_epochs)
         do_save = (epoch in save_epochs) or (
             (args.save_interval is not None) and
             (epoch > start_epoch) and
             (epoch % args.save_interval == 0)
         )
-        if do_eval or do_save: costs = deploy()
-        #if do_save: save_params(epoch)
-        if do_eval: eval_and_disp(epoch, costs)
+        if do_eval or do_save: 
+            costs = deploy()
+            for k, v in zip(disp_costs.keys(), costs):
+                performances[k].append([epoch, v])
+        if do_eval: 
+            outs = eval_and_disp(epoch, costs)
+            for k, v in outs.items():
+                performances[k].append([epoch, v])
+        if do_save: 
+            save_params(epoch)
+        if do_eval or do_save:
+            np.savez(os.path.join(args.exp_dir, "performances.npz"), **performances)
         if epoch == total_niter:
             # on last iteration, only want to eval/disp/save;
             # already trained the full total_niter iterations
@@ -948,13 +962,13 @@ def train():
         start_time = time()
         for index in range(iters_per_epoch):
             inputs = get_batch()
-            train_batch(inputs, n_updates)
+            train_batch(epoch, inputs, n_updates)
             n_updates += 1 + update_both
         epoch_time = time() - start_time
         print('Epoch %d: %f seconds (LR = %g)' \
               % (epoch, epoch_time, lrt.get_value()))
         #eval_costs(epoch, costs)
-
+        
 if __name__ == '__main__':
     if (args.weights is not None) or (args.resume is not None):
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
