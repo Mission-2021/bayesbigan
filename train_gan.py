@@ -309,7 +309,8 @@ else:
                                       args.noise_input_joint_discrim.split(',')]
 assert len(args.noise_input_joint_discrim) == len(args.noise.split('_'))
 
-dist = MultiDistribution(args.batch_size, args.noise,
+dist_def = '_'.join([args.noise for _ in range(args.num_generator)])
+dist = MultiDistribution(args.batch_size, dist_def,
     normalize=args.encode_normalize,
     weights=args.noise_weight, weight_embed=args.noise_input_weight)
 for d in dist.dists:
@@ -324,7 +325,8 @@ if args.crop_size == args.crop_resize:
 else:
     Xis = T.tensor4(dtype='uint8')
 Xs = Output(input_transform(Xis), (args.batch_size, nc, args.crop_resize, args.crop_resize))
-Z = dist.placeholders
+Zs = dist.placeholders
+assert isinstance(Zs, list)
 if args.classifier:
     Y = T.ivector()
     y = Output(Y, shape=(args.batch_size, ), index_max=ny)
@@ -570,7 +572,7 @@ else:
     _train_d = lazy_function(inputs, [], updates=train_d_updates)
 #_gen_trains = [lazy_function(Z, gX.value) for gX in gXs]
 set_mode('test')
-_gens = [lazy_function(Z, gXtest.value) for gXtest in gXtests]
+_gens = [lazy_function(Z, gXtest.value) for Z, gXtest in zip(Zs, gXtests)]
 _cost = lazy_function(inputs, disp_costs.values(),
                       on_unused_input='ignore')
 if args.encode:
