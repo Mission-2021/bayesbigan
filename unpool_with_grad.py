@@ -1,6 +1,6 @@
 import theano
-#import theano.sandbox.cuda.dnn as dnn
-import theano.gpuarray.dnn as dnn
+import theano.sandbox.cuda.dnn as dnn
+#import theano.gpuarray.dnn as dnn
 """ Trick Theano into thinking this is part of the DNN module (dnn.py).
     Otherwise won't find C code files expected to be in same directory. """
 __file__ = dnn.__file__
