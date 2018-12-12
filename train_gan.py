@@ -556,10 +556,9 @@ update_both = (not args.no_update_both) and (args.k == 1)
 niter = args.epochs # # of iter at starting learning rate
 niter_decay = args.decay_epochs # # of iter to decay learning rate
 if update_both:
-    _train_gd = []
     all_updates = g_updates + d_updates + e_updates
-    _train_gd.append(lazy_function(inputs, [], updates=all_updates,
-                          on_unused_input='ignore'))
+    _train_gd = lazy_function(inputs, [], updates=all_updates,
+                              on_unused_input='ignore')
 else:
     niter *= 2
     niter_decay *= 2
