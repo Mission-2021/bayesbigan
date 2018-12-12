@@ -502,9 +502,9 @@ if args.encode:
 else:
     encode_params, encode_gen_params, e_updates = [], [], []
 
-g_updates_list = []
+g_updates = []
 for gi, tg in enumerate(train_gens):
-    g_updates_list.append(tg.net.get_updates(
+    g_updates.extend(tg.net.get_updates(
         updater=updater, dataset_size=dataset.ntrain, loss="loss_gen%d" % gi))
     disp_costs["G%d" % gi] = disp(tg.net.get_loss(name="loss_gen%d" % gi))
 
@@ -556,11 +556,10 @@ update_both = (not args.no_update_both) and (args.k == 1)
 niter = args.epochs # # of iter at starting learning rate
 niter_decay = args.decay_epochs # # of iter to decay learning rate
 if update_both:
-    _train_gd_list = []
-    for g_updates in g_updates_list:
-        all_updates = g_updates + d_updates + e_updates
-        _train_gd_list.append(lazy_function(inputs, [], updates=all_updates,
-                              on_unused_input='ignore'))
+    _train_gd = []
+    all_updates = g_updates + d_updates + e_updates
+    _train_gd.append(lazy_function(inputs, [], updates=all_updates,
+                          on_unused_input='ignore'))
 else:
     niter *= 2
     niter_decay *= 2
@@ -893,7 +892,7 @@ def get_batch(deploy=False):
 invk = int(args.k ** (-1) + 0.5)
 def train_batch(train_epoch, inputs, n_updates):
     if update_both:
-        _train_gd_list[train_epoch % args.num_generator](*inputs)
+        _train_gd(*inputs)
         return
     if ((args.k >= 1 and (n_updates % (args.k+1) == 0)) or
         (args.k < 1 and (n_updates % (invk+1) != 0))):

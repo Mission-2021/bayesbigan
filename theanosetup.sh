@@ -9,14 +9,14 @@ export PATH=${PATH}:/opt/shared/cudatoolkit/8.0.44
 export CUDA_ROOT=/opt/shared/cudatoolkit/8.0.44
 # export THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32
 # CNMem enabled:
-#export THEANO_FLAGS=mode=FAST_RUN,device=gpu
-export THEANO_FLAGS=mode=FAST_RUN,device=cuda
+export THEANO_FLAGS=mode=FAST_RUN,device=gpu
+#export THEANO_FLAGS=mode=FAST_RUN,device=cuda
 export THEANO_FLAGS=${THEANO_FLAGS},dnn.enabled=True
 export THEANO_FLAGS=${THEANO_FLAGS},dnn.include_path=${CUDNN}/include
 export THEANO_FLAGS=${THEANO_FLAGS},dnn.library_path=${CUDNN}/lib64
 # export THEANO_FLAGS=${THEANO_FLAGS},lib.cnmem=1
-#export THEANO_FLAGS=${THEANO_FLAGS},lib.cnmem=0.45
-export THEANO_FLAGS=${THEANO_FLAGS},gpuarray.preallocate=1
+export THEANO_FLAGS=${THEANO_FLAGS},lib.cnmem=0.45
+#export THEANO_FLAGS=${THEANO_FLAGS},gpuarray.preallocate=1
 
 export THEANO_FLAGS=${THEANO_FLAGS},floatX=float32
 # export THEANO_FLAGS=${THEANO_FLAGS},floatX=float16

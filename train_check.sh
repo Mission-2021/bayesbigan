@@ -21,12 +21,12 @@ python -u train_gan.py \
     --megabatch_gb 0.5 \
     --classifier --classifier_deploy \
     --nolog_gain --nogain --nobias --no_decay_gain \
-    --deploy_iters 1000 \
+    --deploy_iters 10 \
     --disp_samples 400 \
-    --disp_interval 100 \
+    --disp_interval 2 \
     --no_disp_one \
-    --epochs 200 --decay_epochs 200 \
-    --save_interval 200 \
+    --epochs 5 --decay_epochs 2 \
+    --save_interval 1 \
     --optimizer adam \
     --noise ${NOISE} \
     ${OBJECTIVE} \

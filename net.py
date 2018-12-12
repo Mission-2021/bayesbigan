@@ -362,21 +362,21 @@ class Deconv(Layer):
 
 class Pool(Layer):
     def get_output(self, h, ksize=1, stride=1, pad='SAME', mode='max'):
-        #from theano.sandbox.cuda.dnn import dnn_pool
-        from theano.tensor.signal.pool import pool_2d as dnn_pool
+        from theano.sandbox.cuda.dnn import dnn_pool
+        #from theano.tensor.signal.pool import pool_2d as dnn_pool
         if mode == 'ave':
             mode = 'average_exc_pad'  # other choice is average_inc_pad
         h, h_shape = h.value, h.shape
         assert len(h_shape) == 4
         pad = get_pad(pad, ksize)
         out = dnn_pool(h, ws=(ksize, ksize), stride=(stride, stride),
-                       pad=(pad, pad), ignore_border=True)
+                       pad=(pad, pad))
         return Output(out)
 
 class SpatialUpsample(Layer):
     def get_output(self, h, factor=2, axis=[2, 3], use_gpu_upsample=True):
-        #import theano.sandbox.cuda.dnn as dnn
-        import theano.gpuarray.dnn as dnn
+        import theano.sandbox.cuda.dnn as dnn
+        #import theano.gpuarray.dnn as dnn
         assert isinstance(factor, int)
         assert factor >= 1
         h, h_shape = h.value, h.shape

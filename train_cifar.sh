@@ -23,9 +23,10 @@ python -u train_gan.py \
     --nolog_gain --nogain --nobias --no_decay_gain \
     --deploy_iters 1000 \
     --disp_samples 400 \
-    --disp_interval 25 \
+    --disp_interval 100 \
+    --save_interval 100 \
     --no_disp_one \
-    --epochs 200 --decay_epochs 200 \
+    --epochs 300 --decay_epochs 300 \
     --optimizer adam \
     --noise ${NOISE} \
     ${OBJECTIVE} \
