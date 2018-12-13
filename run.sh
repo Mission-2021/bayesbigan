@@ -25,8 +25,8 @@
 source theanosetup.sh
 
 #stdbuf -o0 ./train_check.sh
-stdbuf -o0 ./train_mnist.sh
-#stdbuf -o0 ./train_cifar.sh
+#stdbuf -o0 ./train_mnist.sh
+stdbuf -o0 ./train_cifar.sh
 
 
 #python check-gpu.py
