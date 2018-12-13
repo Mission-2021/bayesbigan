@@ -452,7 +452,7 @@ if args.joint_discrim_weight:
     f_joint_discrim = joint_discrim(X, Xs, Y, dist)
     weight = args.joint_discrim_weight
     f_encoder.net.add_loss(f_joint_discrim.net.get_loss('opp_loss_real'),
-                           weight=weight * len(train_gens), name='loss_real')
+                           weight=weight, name='loss_real')
     f_encoder.net.add_agg_loss_term("loss_real")
     # for gi in range(len(train_gens)):
     #     f_encoder.net.add_loss(
