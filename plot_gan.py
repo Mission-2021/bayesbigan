@@ -12,22 +12,17 @@ from scipy.interpolate import spline
 from sklearn.manifold import TSNE
 import re
 
-def plot_losses(loss_dict, savename=None, 
+def plot_metrics(perf_dict, savename=None, metric_name="Loss",
                 title=None, itv=None, marker_size=5):
     
     plt.figure()
     plt.xlabel("Iterations")
-    plt.ylabel("Loss")
+    plt.ylabel(metric_name)
 
-    #if title is not None:
-    #    plt.title(title)
-    plt.title("Loss Plot")
-    X = np.arange(len(list(loss_dict.values())[0]))
-    if itv is None:
-        itv = len(X) // 200
-    for k, v in loss_dict.items():
-        plt.plot(X[::itv], v[::itv], label=k)
-
+    plt.title("%s Plot" % metric_name)
+    # X = np.arange(len(list(perf_dict.values())[0]))
+    for k, v in perf_dict.items():
+        plt.plot(v[:, 0], v[:, 1], label=k)
     
     plt.legend()
     plt.tight_layout()

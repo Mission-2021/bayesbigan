@@ -15,6 +15,8 @@ import theano.tensor as T
 import data
 from data import rescale
 
+from plot_gan import plot_metrics, plot_latent_encodings
+
 import lib.rng as rng
 from lib.lazy_function import LazyFunction as lazy_function
 
@@ -290,9 +292,10 @@ def gen_output_to_enc_input(gX):
 if args.final_lr_mult is None:
     args.final_lr_mult = 0 if args.linear_decay else 0.01
 
-args.exp_dir = os.path.join(
-    args.exp_dir, 
-    "bigan_%s_g%d_%d" % (args.dataset, args.num_generator, int(time())))
+if args.resume is None:
+    args.exp_dir = os.path.join(
+        args.exp_dir, 
+        "bigan_%s_g%d_%d" % (args.dataset, args.num_generator, int(time())))
 model_dir = args.exp_dir
 samples_dir = args.exp_dir
 for d in [model_dir, samples_dir]:
@@ -933,7 +936,7 @@ def train():
     print("Starting training")
     
    
-    performances = defaultdict(lambda: [])    
+    perf = defaultdict(lambda: [])    
 
     for epoch in range(start_epoch, total_niter + 1):
         do_eval = (epoch % args.disp_interval == 0) or (epoch in disp_epochs)
@@ -945,15 +948,15 @@ def train():
         if do_eval or do_save: 
             costs = deploy()
             for k, v in zip(disp_costs.keys(), costs):
-                performances[k].append([epoch, v])
+                perf[k].append([epoch, v])
         if do_eval: 
             outs = eval_and_disp(epoch, costs)
             for k, v in outs.items():
-                performances[k].append([epoch, v])
+                perf[k].append([epoch, v])
         if do_save: 
             save_params(epoch)
         if do_eval or do_save:
-            np.savez(os.path.join(args.exp_dir, "performances.npz"), **performances)
+            np.savez(os.path.join(args.exp_dir, "perf.npz"), **perf)
         if epoch == total_niter:
             # on last iteration, only want to eval/disp/save;
             # already trained the full total_niter iterations
@@ -968,6 +971,16 @@ def train():
         print('Epoch %d: %f seconds (LR = %g)' \
               % (epoch, epoch_time, lrt.get_value()))
         #eval_costs(epoch, costs)
+
+    if do_save:
+        losses = {}
+        losses["Disc loss"] = perf["JD"]
+        losses["Enc loss"]  = perf["E"]
+        for gi in range(args.num_generator):
+            losses["Gen%d loss" % gi] = perf["G%d" % gi]
+        plot_metrics(losses, metric_name="Loss", 
+                     savename=os.path.join(args.exp_dir, "losses_plot.png"))
+        print("Losses plot saved to", args.exp_dir)
         
 if __name__ == '__main__':
     if (args.weights is not None) or (args.resume is not None):
