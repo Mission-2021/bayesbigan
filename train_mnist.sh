@@ -26,7 +26,7 @@ python -u train_gan.py \
     --disp_interval 100 \
     --no_disp_one \
     --epochs 300 --decay_epochs 300 \
-    --save_interval 200 \
+    --save_interval 50 \
     --optimizer adam \
     --noise ${NOISE} \
     ${OBJECTIVE} \

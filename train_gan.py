@@ -312,8 +312,7 @@ else:
                                       args.noise_input_joint_discrim.split(',')]
 assert len(args.noise_input_joint_discrim) == len(args.noise.split('_'))
 
-dist_def = '_'.join([args.noise for _ in range(args.num_generator)])
-dist = MultiDistribution(args.batch_size, dist_def,
+dist = MultiDistribution(args.batch_size, args.noise,
     normalize=args.encode_normalize,
     weights=args.noise_weight, weight_embed=args.noise_input_weight)
 for d in dist.dists:
@@ -715,7 +714,7 @@ def eval_costs(epoch, costs):
     print('%*d) %s' % (len('%d'%total_niter), epoch, cost_string))
 
 
-def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
+def eval_and_disp(epoch, costs, ng=(10 * megabatch_size), plot_latent=False):
     start_time = time()
     eval_costs(epoch, costs)
     kwargs = dict(metric='euclidean')
@@ -742,6 +741,17 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
     if args.encode:
         outs['NNC_e']  = _nnc(big_images, labels, f=_enc_l2distable)
         outs['NNC_e-'] = _nnc(big_images, labels, f=_enc_feats)
+        if plot_latent:
+            f  = _get_feats(_enc_feats, big_images[0][:1500])
+            #fe = _get_feats(_enc_l2distable, big_images[0][:1000])
+            plot_latent_encodings(
+                f, labels[0][:1500], 
+                os.path.join(args.exp_dir, "latent_encodings_e.png"))
+            """
+            plot_latent_encodings(
+                fe, labels[0][:1000], 
+                os.path.join(args.exp_dir, "latent_encodings_e-.png"))
+            """
     if f_discrim is not None:
         outs['NNC_d'] = _nnc(images, labels, f=_discrim_feats)
     if args.classifier:
@@ -750,6 +760,7 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size)):
         if args.encode:
             f = _get_feats(_enc_feats, big_images[0])
             outs['CLS_e-'] = accuracy(_enc_preds, f, vaY)
+                              
         if f_discrim is not None:
             f = _get_feats(_discrim_feats, images[0])
             outs['CLS_d'] = accuracy(_discrim_preds, f, vaY)
@@ -910,15 +921,8 @@ def deploy():
         p.set_value(0 * p.get_value())
     start_time = time()
     print('Running %d deploy update iterations...' % args.deploy_iters)
-    #costs = np.mean([_deploy_update(*get_batch(deploy=True))
-    #                 for _ in range(args.deploy_iters)], axis=0)
-    costs = []
-    for i in range(args.deploy_iters):
-        print("deploy iter %d" % i, end="\r")
-        costs.append(_deploy_update(*get_batch(deploy=True)))
-    print()
-    costs = np.mean(costs, axis=0)
-
+    costs = np.mean([_deploy_update(*get_batch(deploy=True))
+                    for _ in range(args.deploy_iters)], axis=0)
     deploy_time = time() - start_time
     print('done. (%f seconds)\n' % deploy_time)
     return costs
@@ -950,14 +954,14 @@ def train():
             for k, v in zip(disp_costs.keys(), costs):
                 perf[k].append([epoch, v])
         if do_eval: 
-            outs = eval_and_disp(epoch, costs)
+            outs = eval_and_disp(epoch, costs, plot_latent=True)
             for k, v in outs.items():
                 perf[k].append([epoch, v])
-        if do_save: 
-            save_params(epoch)
         if do_eval or do_save:
             np.savez(os.path.join(args.exp_dir, "perf.npz"), **perf)
         if epoch == total_niter:
+            if args.save_interval is not None:
+                save_params(epoch)
             # on last iteration, only want to eval/disp/save;
             # already trained the full total_niter iterations
             break
@@ -972,7 +976,7 @@ def train():
               % (epoch, epoch_time, lrt.get_value()))
         #eval_costs(epoch, costs)
 
-    if do_save:
+    if args.save_interval is not None:
         losses = {}
         losses["Disc loss"] = perf["JD"]
         losses["Enc loss"]  = perf["E"]
@@ -987,6 +991,4 @@ if __name__ == '__main__':
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
     print("TRAINING WITH MCMC SAMPLES@~!~!~!~!!!!!!")
     print("%d samples!!!!" % args.num_generator)
-    import IPython
-    IPython.embed()
     train()

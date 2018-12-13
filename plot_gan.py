@@ -8,9 +8,9 @@ except ImportError:
 
 import sys
 import numpy as np 
-from scipy.interpolate import spline
 from sklearn.manifold import TSNE
 import re
+import pylab
 
 def plot_metrics(perf_dict, savename=None, metric_name="Loss",
                 title=None, itv=None, marker_size=5):
@@ -34,15 +34,15 @@ def plot_metrics(perf_dict, savename=None, metric_name="Loss",
         plt.savefig(savename)
         print("Losses plot saved to %s" % savename)
 
-def plot_latent_encodings(latent_encodings, savename=None):
+def plot_latent_encodings(latent_encodings, labels, savename=None):
     plt.figure()
     plt.title("Latent Encodings")
-    for i,label_inputs in enumerate(latent_encodings):
-        label_embeddings = TSNE().fit_transform(label_inputs)
-        plt.scatter(label_embeddings[:,0], label_embeddings[:,1], label=i)
+    tsne = TSNE()
+    latent_tsne = tsne.fit_transform(latent_encodings)
+    plt.scatter(latent_tsne[:, 0], latent_tsne[:, 1], c=labels, cmap=pylab.cm.plasma)
     plt.xlabel("L1")
     plt.ylabel("L2")
-    plt.legend()
+    #plt.legend()
     try:
         plt.show()
     except:
