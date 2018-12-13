@@ -987,6 +987,6 @@ if __name__ == '__main__':
         load_params(weight_prefix=args.weights, resume_epoch=args.resume)
     print("TRAINING WITH MCMC SAMPLES@~!~!~!~!!!!!!")
     print("%d samples!!!!" % args.num_generator)
-    #import IPython
-    #IPython.embed()
+    import IPython
+    IPython.embed()
     train()
