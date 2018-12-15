@@ -746,7 +746,8 @@ def eval_and_disp(epoch, costs, ng=(10 * megabatch_size), plot_latent=False):
             #fe = _get_feats(_enc_l2distable, big_images[0][:1000])
             plot_latent_encodings(
                 f, labels[0][:1500], 
-                os.path.join(args.exp_dir, "latent_encodings_e.png"))
+                os.path.join(args.exp_dir, "latent_encodings_e.png"),
+                title="%s Latent Encodings" % (args.dataset.upper()))
             """
             plot_latent_encodings(
                 fe, labels[0][:1000], 
@@ -978,11 +979,16 @@ def train():
 
     if args.save_interval is not None:
         losses = {}
-        losses["Disc loss"] = perf["JD"]
-        losses["Enc loss"]  = perf["E"]
+        losses["Disc loss"] = np.array(perf["JD"])
+        losses["Enc loss"]  = np.array(perf["E"])
+        gen_avg = []
         for gi in range(args.num_generator):
-            losses["Gen%d loss" % gi] = perf["G%d" % gi]
+            gen_avg.append(np.array(perf["G%d" % gi]))
+        gen_avg = np.array(gen_avg)
+        gen_avg = np.mean(gen_avg, axis=1)
+        losses["Gen loss (%d MC)" % args.num_generator] = gen_avg
         plot_metrics(losses, metric_name="Loss", 
+                     title="%d Losses Plot" % args.dataset,
                      savename=os.path.join(args.exp_dir, "losses_plot.png"))
         print("Losses plot saved to", args.exp_dir)
         

@@ -10,19 +10,19 @@ import sys
 import numpy as np 
 from sklearn.manifold import TSNE
 import re
-import pylab
 
 def plot_metrics(perf_dict, savename=None, metric_name="Loss",
-                title=None, itv=None, marker_size=5):
-    
+                 title=None, itv=None, marker_size=5):
     plt.figure()
     plt.xlabel("Iterations")
     plt.ylabel(metric_name)
-
-    plt.title("%s Plot" % metric_name)
+    if title:
+        plt.title(title)
+    else:
+        plt.title("%s Plot" % metric_name)
     # X = np.arange(len(list(perf_dict.values())[0]))
     for k, v in perf_dict.items():
-        plt.plot(v[:, 0], v[:, 1], label=k)
+        plt.plot(v[:, 0], v[:, 1], label=k, marker=".", linestyle=":" )
     
     plt.legend()
     plt.tight_layout()
@@ -30,19 +30,27 @@ def plot_metrics(perf_dict, savename=None, metric_name="Loss",
         plt.show()
     except:
         pass
+
     if savename is not None:
         plt.savefig(savename)
         print("Losses plot saved to %s" % savename)
 
-def plot_latent_encodings(latent_encodings, labels, savename=None):
+def plot_latent_encodings(latent_encodings, labels, savename=None, title=None):
     plt.figure()
-    plt.title("Latent Encodings")
+    if title is None:
+        plt.title("Latent Encodings")
+    else:
+        plt.title(title)
     tsne = TSNE()
     latent_tsne = tsne.fit_transform(latent_encodings)
-    plt.scatter(latent_tsne[:, 0], latent_tsne[:, 1], c=labels, cmap=pylab.cm.plasma)
+    
+    for i in np.unique(labels):
+        latents = latent_tsne[np.where(labels == i)]
+        plt.scatter(latents[:, 0], latents[:, 1], label=i)
     plt.xlabel("L1")
     plt.ylabel("L2")
-    #plt.legend()
+    plt.tight_layout()
+    plt.legend()
     try:
         plt.show()
     except:

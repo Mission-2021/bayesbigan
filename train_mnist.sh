@@ -12,7 +12,7 @@ OBJECTIVE="--encode_gen_weight 1 --encode_weight 0 --discrim_weight 0 --joint_di
 # OBJECTIVE="--encode_gen_weight 0.25 --encode_weight 1 --discrim_weight 1 --joint_discrim_weight 0"
 
 python -u train_gan.py \
-    --num_generator 3 \
+    --num_generator 5 \
     --encode --encode_normalize \
     --dataset mnist --crop_size 28 \
     --encode_net mnist_mlp \
