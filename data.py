@@ -267,6 +267,20 @@ class MemoryDataProvider(DataProvider):
             images = images.reshape((-1, ) + self.image_shape)
         return [images], labels
 
+
+def cifar3_data_providers(batch_size, crop_size=[]):
+    if isinstance(crop_size, int): crop_size = [crop_size]
+    
+    shape = 3, 32, 32
+    from load import cifar3
+    trX, teX, trY, teY = cifar3()
+    
+    return {
+        "train": MemoryDataProvider(trX, trY, batch_size, 
+                                    crop_size=crop_size, image_shape=shape),
+        "val"  : MemoryDataProvider(teX, teY, batch_size, 
+                                    crop_size=crop_size, image_shape=shape)
+    }
 def cifar_data_providers(batch_size, crop_size=[]):
     if isinstance(crop_size, int): crop_size = [crop_size]
     
@@ -280,7 +294,6 @@ def cifar_data_providers(batch_size, crop_size=[]):
         "val"  : MemoryDataProvider(teX, teY, batch_size, 
                                     crop_size=crop_size, image_shape=shape)
     }
-
 def mnist_data_providers(batch_size, crop_size=[], use_test_set=False):
     if isinstance(crop_size, int): crop_size = [crop_size]
     from load import mnist_with_valid_set
@@ -368,9 +381,13 @@ class Dataset(object):
             providers = mnist_data_providers(args.batch_size, crop_size=crop_sizes,
                                              use_test_set=args.use_test_set)
 
-        elif args.dataset == "cifar":
-            self.nc, self.ny = 3, 10
-            providers = cifar_data_providers(args.batch_size, crop_size=crop_sizes)
+        elif args.dataset in ["cifar", "cifar3"]:
+            if args.dataset == "cifar":
+                providers = cifar_data_providers(args.batch_size, crop_size=crop_sizes)
+                self.nc, self.ny = 3, 10
+            else:
+                providers = cifar3_data_providers(args.batch_size, crop_size=crop_sizes)
+                self.nc = self.ny = 3
             def inverse_transform(X, crop=args.crop_resize):
                 return X.reshape(-1, self.nc, crop, crop).transpose(0, 2, 3, 1)
             self.grid_vis = color_grid_vis

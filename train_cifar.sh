@@ -14,14 +14,14 @@ OBJECTIVE="--encode_gen_weight 1 --encode_weight 0 --discrim_weight 0 --joint_di
 python -u train_gan.py \
     --num_generator 2 \
     --encode --encode_normalize \
-    --dataset cifar --crop_size 32 \
+    --dataset cifar3 --crop_size 32 \
     --gen_net_size 32 \
     --feat_net_size 32 \
     --encode_net alexnet_group_padpool \
     --megabatch_gb 0.5 \
     --classifier --classifier_deploy \
     --nolog_gain --nogain --nobias --no_decay_gain \
-    --deploy_iters 1000 \
+    --deploy_iters 1 \
     --disp_samples 400 \
     --disp_interval 200 \
     --save_interval 200 \

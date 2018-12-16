@@ -955,7 +955,7 @@ def train():
             for k, v in zip(disp_costs.keys(), costs):
                 perf[k].append([epoch, v])
         if do_eval: 
-            outs = eval_and_disp(epoch, costs, plot_latent=True)
+            outs = eval_and_disp(epoch, costs, plot_latent=(args.dataset == "mnist"))
             for k, v in outs.items():
                 perf[k].append([epoch, v])
         if do_eval or do_save:
