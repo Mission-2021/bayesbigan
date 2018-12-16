@@ -988,7 +988,7 @@ def train():
         gen_avg = np.mean(gen_avg, axis=1)
         losses["Gen loss (%d MC)" % args.num_generator] = gen_avg
         plot_metrics(losses, metric_name="Loss", 
-                     title="%d Losses Plot" % args.dataset,
+                     title="%s Losses Plot" % args.dataset,
                      savename=os.path.join(args.exp_dir, "losses_plot.png"))
         print("Losses plot saved to", args.exp_dir)
         
