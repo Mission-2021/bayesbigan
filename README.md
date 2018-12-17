@@ -7,6 +7,7 @@ Code is forked from [Bidrectional GAN](https://github.com/jeffdonahue/bigan), wi
 
 ## Dependencies
 This code has the following dependencies (version number crucial):
+
     python 3.6
     theano 0.9
     cuda 8.0
