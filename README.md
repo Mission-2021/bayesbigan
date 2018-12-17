@@ -1,6 +1,8 @@
 # Bayesian Bidrectional GAN
 By Julie Jiang and Daniel Dinjian.
+
 Final project for COMP150 Bayesian Deep Learning (Fall 2018), Tufts University.
+
 Instructor: Mike Huges
 
 Code is forked from [Bidrectional GAN](https://github.com/jeffdonahue/bigan), with references to [BayesGAN](https://github.com/andrewgordonwilson/bayesgan/).
@@ -38,7 +40,7 @@ The `train_mnist.sh` script trains a "permutation-invariant" BiGAN (by default) 
 
 
 ### BiGAN
-The BiGAN discriminator (or "joint discriminator") is enabled by setting a non-zero `joint_discrim_weight`, and the number of MC samples of the generator is set with `num_generator`
+The BiGAN discriminator (or "joint discriminator") is enabled by setting a non-zero `joint_discrim_weight`, and the number of MC samples of the generator is set with `num_generator`.
 
     OBJECTIVE="--encode_gen_weight 1 --encode_weight 0 --discrim_weight 0 --joint_discrim_weight 1"
     ./train_mnist.sh $OBJECTIVE --num_generator 1 --exp_dir ./exp
@@ -72,7 +74,9 @@ After training, the image samples are saved in a subdirectory in the directory s
 
 ## CIFAR
 
-Please download the [CIFAR10 dataset](https://www.cs.toronto.edu/~kriz/cifar.html) and use the make sure that `$DATADIR/cifar/cifar-10-batches-py` is a valid directory. When training indicate that the dataset is `cifar`. `train_cifar.sh` contains the script to train the cifar dataset.
+Please download the [CIFAR10 dataset](https://www.cs.toronto.edu/~kriz/cifar.html) and use the make sure that `$DATADIR/cifar/cifar-10-batches-py` is a valid directory. When training indicate that the dataset is `cifar`. 
+
+`train_cifar.sh` contains the script to train the cifar dataset.
 
 ## Contact
 Please contact julie.jiang@tufts.edu or daniel.dinjian@tufts.edu for any questions. 
