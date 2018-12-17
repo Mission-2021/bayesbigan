@@ -3,3 +3,4 @@
 *.png
 exp/*
 check-gpu.py
+__pycache__

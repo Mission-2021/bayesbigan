@@ -22,6 +22,8 @@
 #SBATCH -n 1
 #SBATCH --exclude=pgpu[01-03]
 
+mkdir -p exp/output
+
 source theanosetup.sh
 
 #stdbuf -o0 ./train_check.sh
