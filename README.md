@@ -7,6 +7,8 @@ Instructor: Mike Huges
 
 Code is forked from [Bidrectional GAN](https://github.com/jeffdonahue/bigan), with references to [BayesGAN](https://github.com/andrewgordonwilson/bayesgan/).
 
+You can read our [final paper](https://github.com/julie-jiang/bayesbigan/blob/master/bayesian_gan.pdf).
+
 ## Dependencies
 This code has the following dependencies (version number crucial):
 
